@@ -5,6 +5,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { OnaEnvironment } from './schema/ona-enviroment.schema';
 import { VisoObject } from '../viso-object/schema/viso-object.schema';
 import { CreateOnaEnvironmentDto } from './dto/create-ona-environment.dto';
+import { Types } from 'mongoose';
 
 describe('OnaEnvironmentService', () => {
   let service: OnaEnvironmentService;
@@ -260,6 +261,123 @@ describe('OnaEnvironmentService', () => {
       await expect(service.findOne(validId)).rejects.toThrow(
         'Failed to find onaEnvironment due to an unknown error',
       );
+    });
+  });
+
+  describe('countEnvironments', () => {
+    it('should return total count of environments', async () => {
+      (mockOnaEnvironmentModel as any).countDocuments = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(10),
+      });
+      const result = await service.countEnvironments();
+      expect(result.total).toBe(10);
+    });
+
+    it('should throw Error when countDocuments fails', async () => {
+      (mockOnaEnvironmentModel as any).countDocuments = jest.fn().mockReturnValue({
+        exec: jest.fn().mockRejectedValue(new Error('Database error')),
+      });
+      await expect(service.countEnvironments()).rejects.toThrow('Failed to count onaEnvironment: Database error');
+    });
+  });
+
+  describe('findLast', () => {
+    it('should return the last created environment', async () => {
+      (mockOnaEnvironmentModel as any).findOne = jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(mockOnaEnvironment),
+      });
+      const result = await service.findLast();
+      expect(result).toEqual(mockOnaEnvironment);
+    });
+  });
+
+  describe('countObjectsAggregation', () => {
+    it('should aggregate objects for all environments', async () => {
+      const mockAggResult = [
+        {
+          environments: [{ environmentId: 'id1', objectsCount: 5 }],
+          totalObjects: 5,
+        },
+      ];
+      (mockOnaEnvironmentModel as any).aggregate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockAggResult),
+      });
+
+      const result = await service.countObjectsAggregation();
+      expect(result.totalObjects).toBe(5);
+      expect(result.environments[0].environmentId).toBe('id1');
+    });
+
+    it('should aggregate objects for a specific environment', async () => {
+      const mockAggResult = [
+        {
+          environmentId: 'id1',
+          objectsCount: 5,
+        },
+      ];
+      (mockOnaEnvironmentModel as any).aggregate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockAggResult),
+      });
+
+      const result = await service.countObjectsAggregation('507f1f77bcf86cd799439011');
+      expect(result.totalObjects).toBe(5);
+      expect(result.environments[0].environmentId).toBe('id1');
+    });
+
+    it('should throw Error when aggregation fails', async () => {
+      (mockOnaEnvironmentModel as any).aggregate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockRejectedValue(new Error('Database error')),
+      });
+      await expect(service.countObjectsAggregation()).rejects.toThrow('Failed to aggregate environment objects: Database error');
+    });
+  });
+
+  describe('search', () => {
+    it('should return empty results if name search finds no objects', async () => {
+      (mockVisoObjectModel as any).find = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.search({ name: 'nonexistent' });
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should return results matching object name', async () => {
+      (mockVisoObjectModel as any).find = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([{ _id: '507f1f77bcf86cd799439011' }]),
+      });
+
+      (mockOnaEnvironmentModel as any).countDocuments = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(1),
+      });
+
+      (mockOnaEnvironmentModel as any).find = jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([mockOnaEnvironment]),
+      });
+
+      const result = await service.search({ name: 'test' });
+      expect(result.items.length).toBe(1);
+      expect(result.total).toBe(1);
+    });
+
+    it('should throw Error on search failure', async () => {
+      (mockVisoObjectModel as any).find = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockRejectedValue(new Error('Database error')),
+      });
+
+      await expect(service.search({ name: 'test' })).rejects.toThrow('Failed to search environments: Database error');
     });
   });
 });

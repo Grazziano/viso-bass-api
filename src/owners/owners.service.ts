@@ -162,6 +162,9 @@ export class OwnersService {
       }
       return updated as unknown as Omit<Owner, 'password'>;
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       this.logger.error(
         `Erro ao atualizar papel do usuário ${id}: ${(error as Error).message}`,
         (error as Error).stack,

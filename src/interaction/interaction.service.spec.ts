@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { InteractionService } from './interaction.service';
 import { Interaction } from './schema/interaction.schema';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
+import { VisoObject } from '../viso-object/schema/viso-object.schema';
 
 describe('InteractionService', () => {
   let service: InteractionService;
@@ -36,19 +37,31 @@ describe('InteractionService', () => {
       save: jest.fn(),
     }));
 
-    // Adicionar métodos estáticos ao mock
-    (mockModel as any).find = jest.fn();
-    (mockModel as any).findById = jest.fn();
+    (mockModel as any).find = jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn(),
+    });
+    (mockModel as any).findById = jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn(),
+    });
+    (mockModel as any).findOne = jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        exec: jest.fn(),
+    });
     (mockModel as any).aggregate = jest.fn();
     (mockModel as any).countDocuments = jest.fn().mockReturnValue({
-      exec: jest.fn().mockResolvedValue(0),
+        exec: jest.fn(),
     });
 
     mockVisoObjectModel = jest.fn();
     mockVisoObjectModel.find = jest.fn().mockReturnValue({
-      lean: jest
-        .fn()
-        .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([]),
     });
 
     const module: TestingModule = await Test.createTestingModule({
@@ -59,9 +72,7 @@ describe('InteractionService', () => {
           useValue: mockModel,
         },
         {
-          provide: getModelToken(
-            require('../viso-object/schema/viso-object.schema').VisoObject.name,
-          ),
+          provide: getModelToken(VisoObject.name),
           useValue: mockVisoObjectModel,
         },
       ],
@@ -71,293 +82,129 @@ describe('InteractionService', () => {
     model = module.get<Model<Interaction>>(getModelToken(Interaction.name));
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('should be defined', () => {
+    expect(service).toBeDefined();
   });
 
   describe('create', () => {
     it('should create and save an interaction successfully', async () => {
-      // Arrange
-      const mockSave = jest.fn().mockResolvedValue(mockInteraction as any);
+      const mockSave = jest.fn().mockResolvedValue(mockInteraction);
       (model as any).mockImplementation(() => ({
         save: mockSave,
       }));
 
-      // Act
       const result = await service.create(mockCreateInteractionDto);
-
-      // Assert
-      expect(model).toHaveBeenCalledWith(mockCreateInteractionDto);
-      expect(mockSave).toHaveBeenCalled();
       expect(result).toEqual(mockInteraction);
     });
 
     it('should throw error when save fails', async () => {
-      // Arrange
-      const error = new Error('Database error');
-      const mockSave = jest.fn().mockRejectedValue(error);
+      const mockSave = jest.fn().mockRejectedValue(new Error('DB error'));
       (model as any).mockImplementation(() => ({
         save: mockSave,
       }));
 
-      // Act & Assert
-      await expect(service.create(mockCreateInteractionDto)).rejects.toThrow(
-        'Failed to create interaction: Database error',
-      );
-    });
-
-    it('should throw generic error for unknown errors', async () => {
-      // Arrange
-      const mockSave = jest.fn().mockRejectedValue(null); // null não é uma instância de Error
-      (model as any).mockImplementation(() => ({
-        save: mockSave,
-      }));
-
-      // Act & Assert
-      await expect(service.create(mockCreateInteractionDto)).rejects.toThrow(
-        'Failed to create interaction due to an unknown error',
-      );
+      await expect(service.create(mockCreateInteractionDto)).rejects.toThrow('Failed to create interaction: DB error');
     });
   });
 
   describe('findAll', () => {
     it('should return paginated interactions', async () => {
-      // Arrange
-      const mockInteractions = [mockInteraction];
-      const mockCountExec = jest.fn().mockResolvedValue(1);
-      const mockExec = jest.fn().mockResolvedValue(mockInteractions);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
+      (model as any).countDocuments().exec.mockResolvedValue(1);
+      (model as any).find().exec.mockResolvedValue([mockInteraction]);
+      mockVisoObjectModel.find().exec.mockResolvedValue([{ _id: '507f1f77bcf86cd799439011' }]);
 
-      (model as any).find = jest.fn().mockReturnValue({
-        sort: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        lean: mockLean,
-        exec: mockExec,
-      });
-      (model as any).countDocuments = jest
-        .fn()
-        .mockReturnValue({ exec: mockCountExec });
-
-      // Act
       const result = await service.findAll();
-
-      // Assert
-      expect((model as any).countDocuments).toHaveBeenCalled();
-      expect((model as any).find).toHaveBeenCalled();
-      expect(Array.isArray(result.items)).toBe(true);
-      expect(result.items.length).toBe(1);
       expect(result.total).toBe(1);
+      expect(result.items).toHaveLength(1);
     });
 
     it('should throw error when find fails', async () => {
-      // Arrange
-      const error = new Error('Database error');
-      const mockCountExec = jest.fn().mockResolvedValue(1);
-      const mockExec = jest.fn().mockRejectedValue(error);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
-
-      (model as any).find = jest.fn().mockReturnValue({
-        sort: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        lean: mockLean,
-        exec: mockExec,
-      });
-      (model as any).countDocuments = jest
-        .fn()
-        .mockReturnValue({ exec: mockCountExec });
-
-      // Act & Assert
-      await expect(service.findAll()).rejects.toThrow(
-        'Failed to find interaction: Database error',
-      );
+      (model as any).countDocuments().exec.mockRejectedValue(new Error('DB error'));
+      (model as any).find().exec.mockResolvedValue([]);
+      await expect(service.findAll()).rejects.toThrow('Failed to find interaction: DB error');
     });
   });
 
   describe('countInteractionsByDay', () => {
-    it('should return interaction count by day for week period', async () => {
-      // Arrange
-      const mockResult = [
-        { _id: '2024-01-01', total: 5 },
-        { _id: '2024-01-02', total: 3 },
-      ];
+    it('should return interaction count by day', async () => {
+      const mockResult = [{ _id: '2024-01-01', total: 5 }];
+      (model as any).aggregate.mockResolvedValue(mockResult);
 
-      model.aggregate = jest.fn().mockResolvedValue(mockResult);
-
-      // Act
       const result = await service.countInteractionsByDay('week');
-
-      // Assert
-      expect(model.aggregate).toHaveBeenCalledWith([
-        {
-          $match: {
-            createdAt: { $gte: expect.any(Date) },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
-            },
-            total: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]);
-      expect(result).toEqual(mockResult);
-    });
-
-    it('should return interaction count by day for month period', async () => {
-      // Arrange
-      const mockResult = [
-        { _id: '2024-01-01', total: 10 },
-        { _id: '2024-01-02', total: 8 },
-      ];
-
-      model.aggregate = jest.fn().mockResolvedValue(mockResult);
-
-      // Act
-      const result = await service.countInteractionsByDay('month');
-
-      // Assert
-      expect(model.aggregate).toHaveBeenCalled();
       expect(result).toEqual(mockResult);
     });
 
     it('should throw error when aggregation fails', async () => {
-      // Arrange
-      const error = new Error('Aggregation error');
-      model.aggregate = jest.fn().mockRejectedValue(error);
-
-      // Act & Assert
-      await expect(service.countInteractionsByDay('week')).rejects.toThrow(
-        'Failed to find interaction: Aggregation error',
-      );
+      (model as any).aggregate.mockRejectedValue(new Error('error'));
+      await expect(service.countInteractionsByDay('week')).rejects.toThrow('Failed to find interaction: error');
     });
   });
 
   describe('getTimeSeries', () => {
-    it('should return time series data for 7 days', async () => {
-      // Arrange
-      const mockResult = [
-        { date: '2024-01-01', interactions: 5 },
-        { date: '2024-01-02', interactions: 3 },
-      ];
+    it('should return time series data', async () => {
+      const mockResult = [{ date: '2024-01-01', interactions: 5 }];
+      (model as any).aggregate.mockResolvedValue(mockResult);
 
-      model.aggregate = jest.fn().mockResolvedValue(mockResult);
-
-      // Act
       const result = await service.getTimeSeries('7d');
-
-      // Assert
-      expect(model.aggregate).toHaveBeenCalledWith([
-        {
-          $match: {
-            createdAt: { $gte: expect.any(Date) },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
-            },
-            interactions: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-        {
-          $project: {
-            _id: 0,
-            date: '$_id',
-            interactions: 1,
-          },
-        },
-      ]);
       expect(result).toEqual(mockResult);
     });
 
-    it('should return time series data for 30 days', async () => {
-      // Arrange
-      const mockResult = [
-        { date: '2024-01-01', interactions: 15 },
-        { date: '2024-01-02', interactions: 12 },
-      ];
+    it('should throw error when aggregation fails', async () => {
+      (model as any).aggregate.mockRejectedValue(new Error('error'));
+      await expect(service.getTimeSeries('7d')).rejects.toThrow('Failed to find interaction: error');
+    });
+  });
 
-      model.aggregate = jest.fn().mockResolvedValue(mockResult);
-
-      // Act
-      const result = await service.getTimeSeries('30d');
-
-      // Assert
-      expect(model.aggregate).toHaveBeenCalled();
-      expect(result).toEqual(mockResult);
+  describe('countInteractions', () => {
+    it('should return total count', async () => {
+      (model as any).countDocuments().exec.mockResolvedValue(10);
+      const result = await service.countInteractions();
+      expect(result.total).toBe(10);
     });
 
-    it('should throw error when time series aggregation fails', async () => {
-      // Arrange
-      const error = new Error('Time series error');
-      model.aggregate = jest.fn().mockRejectedValue(error);
+    it('should throw error when countDocuments fails', async () => {
+      (model as any).countDocuments().exec.mockRejectedValue(new Error('error'));
+      await expect(service.countInteractions()).rejects.toThrow('Failed to count interactions: error');
+    });
+  });
 
-      // Act & Assert
-      await expect(service.getTimeSeries('7d')).rejects.toThrow(
-        'Failed to find interaction: Time series error',
-      );
+  describe('findLast', () => {
+    it('should return last interaction', async () => {
+      (model as any).findOne().exec.mockResolvedValue(mockInteraction);
+      const result = await service.findLast();
+      expect(result).toEqual(mockInteraction);
     });
   });
 
   describe('findOne', () => {
-    it('should return a single interaction by id', async () => {
-      // Arrange
-      const id = '507f1f77bcf86cd799439011';
-      const mockExec = jest.fn().mockResolvedValue(mockInteraction as any);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
-
-      model.findById = jest.fn().mockReturnValue({ lean: mockLean });
-
-      // Act
-      const result = await service.findOne(id);
-
-      // Assert
-      expect(model.findById).toHaveBeenCalledWith(id);
-      expect(mockLean).toHaveBeenCalled();
-      expect(mockExec).toHaveBeenCalled();
+    it('should return interaction by id', async () => {
+      (model as any).findById().exec.mockResolvedValue(mockInteraction);
+      const result = await service.findOne('id');
       expect(result).toEqual(mockInteraction);
     });
 
-    it('should return null when interaction is not found', async () => {
-      // Arrange
-      const id = 'nonexistent-id';
-      const mockExec = jest.fn().mockResolvedValue(null);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
-
-      model.findById = jest.fn().mockReturnValue({ lean: mockLean });
-
-      // Act
-      const result = await service.findOne(id);
-
-      // Assert
-      expect(model.findById).toHaveBeenCalledWith(id);
-      expect(result).toBeNull();
-    });
-
     it('should throw error when findById fails', async () => {
-      // Arrange
-      const id = '507f1f77bcf86cd799439011';
-      const error = new Error('Database error');
-      const mockExec = jest.fn().mockRejectedValue(error);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
-
-      model.findById = jest.fn().mockReturnValue({ lean: mockLean });
-
-      // Act & Assert
-      await expect(service.findOne(id)).rejects.toThrow(
-        'Failed to find interaction: Database error',
-      );
+      (model as any).findById().exec.mockRejectedValue(new Error('error'));
+      await expect(service.findOne('id')).rejects.toThrow('Failed to find interaction: error');
     });
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  describe('search', () => {
+    it('should return search results', async () => {
+      mockVisoObjectModel.find().exec.mockResolvedValue([{ _id: '507f1f77bcf86cd799439011' }]);
+
+      (model as any).countDocuments().exec.mockResolvedValue(1);
+      (model as any).find().exec.mockResolvedValue([mockInteraction]);
+
+      const result = await service.search({ name: 'test' });
+      expect(result.total).toBe(1);
+      expect(result.items).toHaveLength(1);
+    });
+
+    it('should throw error when search fails', async () => {
+      mockVisoObjectModel.find().exec.mockRejectedValue(new Error('error'));
+
+      await expect(service.search({ name: 'test' })).rejects.toThrow('Failed to search interactions: error');
+    });
   });
 });

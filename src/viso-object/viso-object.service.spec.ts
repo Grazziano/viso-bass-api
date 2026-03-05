@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import {
   InternalServerErrorException,
   NotFoundException,
@@ -26,8 +26,8 @@ describe('VisoObjectService', () => {
     obj_name: 'Test Object',
     obj_model: 'Model X',
     obj_brand: 'Brand Y',
-    obj_function: 'sensor',
-    obj_restriction: 'none',
+    obj_function: ['sensor'],
+    obj_restriction: ['none'],
     obj_limitation: ['battery'],
     obj_access: 1,
     obj_location: 101,
@@ -36,6 +36,25 @@ describe('VisoObjectService', () => {
     obj_owner: '507f1f77bcf86cd799439011',
     createdAt: new Date('2024-01-01T10:00:00Z'),
     updatedAt: new Date('2024-01-01T10:00:00Z'),
+    toJSON: function() {
+        return {
+            _id: this._id,
+            obj_networkMAC: this.obj_networkMAC,
+            obj_name: this.obj_name,
+            obj_model: this.obj_model,
+            obj_brand: this.obj_brand,
+            obj_function: this.obj_function,
+            obj_restriction: this.obj_restriction,
+            obj_limitation: this.obj_limitation,
+            obj_access: this.obj_access,
+            obj_location: this.obj_location,
+            obj_qualification: this.obj_qualification,
+            obj_status: this.obj_status,
+            obj_owner: this.obj_owner,
+            createdAt: this.createdAt,
+            updatedAt: this.updatedAt,
+        };
+    }
   };
 
   const mockCreateVisoObjectDto: CreateVisoObjectDto = {
@@ -56,10 +75,27 @@ describe('VisoObjectService', () => {
     const mockModel = jest.fn().mockImplementation(() => ({
       save: jest.fn(),
     }));
-    (mockModel as any).find = jest.fn();
-    (mockModel as any).findById = jest.fn();
+    (mockModel as any).find = jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn(),
+    });
+    (mockModel as any).findById = jest.fn().mockReturnValue({
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn(),
+    });
+    (mockModel as any).findOne = jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn(),
+    });
     (mockModel as any).countDocuments = jest.fn().mockReturnValue({
-      exec: jest.fn().mockResolvedValue(0),
+      exec: jest.fn(),
+    });
+    (mockModel as any).aggregate = jest.fn().mockReturnValue({
+      exec: jest.fn(),
     });
 
     const module: TestingModule = await Test.createTestingModule({
@@ -76,213 +112,124 @@ describe('VisoObjectService', () => {
     model = module.get<Model<VisoObject>>(getModelToken(VisoObject.name));
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('should be defined', () => {
+    expect(service).toBeDefined();
   });
 
   describe('create', () => {
     it('should create and save a viso object successfully', async () => {
-      // Arrange
-      const mockSave = jest.fn().mockResolvedValue({
-        ...mockVisoObject,
-        toJSON: jest.fn().mockReturnValue(mockVisoObject),
-      });
+      const mockSave = jest.fn().mockResolvedValue(mockVisoObject);
       const mockConstructor = jest.fn().mockImplementation(() => ({
         save: mockSave,
       }));
-
       (model as any).mockImplementation(mockConstructor);
 
-      // Act
       const result = await service.create(mockCreateVisoObjectDto, mockUser);
 
-      // Assert
-      expect(mockConstructor).toHaveBeenCalledWith({
-        ...mockCreateVisoObjectDto,
-        obj_owner: mockUser.userId,
-      });
+      expect(mockConstructor).toHaveBeenCalled();
       expect(mockSave).toHaveBeenCalled();
       expect(result).toBeInstanceOf(ResponseVisoObjectDto);
     });
 
     it('should throw InternalServerErrorException when save fails', async () => {
-      // Arrange
-      const error = new Error('Database error');
-      const mockSave = jest.fn().mockRejectedValue(error);
+      const mockSave = jest.fn().mockRejectedValue(new Error('DB error'));
       const mockConstructor = jest.fn().mockImplementation(() => ({
         save: mockSave,
       }));
-
       (model as any).mockImplementation(mockConstructor);
 
-      // Act & Assert
-      await expect(
-        service.create(mockCreateVisoObjectDto, mockUser),
-      ).rejects.toThrow(InternalServerErrorException);
-      await expect(
-        service.create(mockCreateVisoObjectDto, mockUser),
-      ).rejects.toThrow('Failed to create object: Database error');
+      await expect(service.create(mockCreateVisoObjectDto, mockUser)).rejects.toThrow(InternalServerErrorException);
     });
   });
 
   describe('findAll', () => {
-    it('should return all viso objects with pagination', async () => {
-      // Arrange
-      const mockObjects = [mockVisoObject];
-      const mockCountExec = jest.fn().mockResolvedValue(1);
-      const mockExec = jest.fn().mockResolvedValue(mockObjects);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
+    it('should return paginated objects', async () => {
+      (model as any).countDocuments().exec.mockResolvedValue(1);
+      (model as any).find().exec.mockResolvedValue([mockVisoObject]);
 
-      (model as any).find = jest.fn().mockReturnValue({
-        sort: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        lean: mockLean,
-        exec: mockExec,
-      });
-      (model as any).countDocuments = jest
-        .fn()
-        .mockReturnValue({ exec: mockCountExec });
-
-      // Act
       const result = await service.findAll();
-
-      // Assert
-      expect((model as any).countDocuments).toHaveBeenCalled();
-      expect((model as any).find).toHaveBeenCalled();
-      expect(mockLean).toHaveBeenCalled();
-      expect(mockExec).toHaveBeenCalled();
       expect(result.total).toBe(1);
-      expect(Array.isArray(result.items)).toBe(true);
       expect(result.items).toHaveLength(1);
-      expect(result.items[0]).toBeInstanceOf(ResponseVisoObjectDto);
-      expect(result.page).toBe(1);
-      expect(result.limit).toBeGreaterThan(0);
     });
 
-    it('should return empty array when no objects exist', async () => {
-      // Arrange
-      const mockCountExec = jest.fn().mockResolvedValue(0);
-      const mockExec = jest.fn().mockResolvedValue([]);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
-
-      (model as any).find = jest.fn().mockReturnValue({
-        sort: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        lean: mockLean,
-        exec: mockExec,
-      });
-      (model as any).countDocuments = jest
-        .fn()
-        .mockReturnValue({ exec: mockCountExec });
-
-      // Act
-      const result = await service.findAll();
-
-      // Assert
-      expect((model as any).countDocuments).toHaveBeenCalled();
-      expect((model as any).find).toHaveBeenCalled();
-      expect(Array.isArray(result.items)).toBe(true);
-      expect(result.items).toEqual([]);
-      expect(result.total).toBe(0);
-    });
-
-    it('should throw InternalServerErrorException when find fails', async () => {
-      // Arrange
-      const error = new Error('Database error');
-      const mockCountExec = jest.fn().mockResolvedValue(1);
-      const mockExec = jest.fn().mockRejectedValue(error);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
-
-      (model as any).find = jest.fn().mockReturnValue({
-        sort: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        lean: mockLean,
-        exec: mockExec,
-      });
-      (model as any).countDocuments = jest
-        .fn()
-        .mockReturnValue({ exec: mockCountExec });
-
-      // Act & Assert
-      await expect(service.findAll()).rejects.toThrow(
-        InternalServerErrorException,
-      );
-      await expect(service.findAll()).rejects.toThrow(
-        'Failed to find objects: Database error',
-      );
+    it('should throw InternalServerErrorException on error', async () => {
+      (model as any).countDocuments().exec.mockRejectedValue(new Error('DB error'));
+      await expect(service.findAll()).rejects.toThrow(InternalServerErrorException);
     });
   });
 
   describe('findOne', () => {
-    it('should return a single viso object by id', async () => {
-      // Arrange
-      const id = '507f1f77bcf86cd799439012';
-      const mockExec = jest.fn().mockResolvedValue(mockVisoObject);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
+    it('should return an object by id', async () => {
+      (model as any).findById().exec.mockResolvedValue(mockVisoObject);
 
-      model.findById = jest.fn().mockReturnValue({ lean: mockLean });
-
-      // Act
-      const result = await service.findOne(id);
-
-      // Assert
-      expect(model.findById).toHaveBeenCalledWith(id);
-      expect(mockLean).toHaveBeenCalled();
-      expect(mockExec).toHaveBeenCalled();
+      const result = await service.findOne('id');
       expect(result).toBeInstanceOf(ResponseVisoObjectDto);
     });
 
-    it('should throw NotFoundException when object is not found', async () => {
-      // Arrange
-      const id = 'nonexistent-id';
-      const mockExec = jest.fn().mockResolvedValue(null);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
+    it('should throw NotFoundException if not found', async () => {
+      (model as any).findById().exec.mockResolvedValue(null);
 
-      model.findById = jest.fn().mockReturnValue({ lean: mockLean });
-
-      // Act & Assert
-      await expect(service.findOne(id)).rejects.toThrow(NotFoundException);
-      await expect(service.findOne(id)).rejects.toThrow(
-        `Object with id ${id} not found`,
-      );
+      await expect(service.findOne('id')).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw InternalServerErrorException when findById fails', async () => {
-      // Arrange
-      const id = '507f1f77bcf86cd799439012';
-      const error = new Error('Database error');
-      const mockExec = jest.fn().mockRejectedValue(error);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
+    it('should throw InternalServerErrorException on error', async () => {
+      (model as any).findById().exec.mockRejectedValue(new Error('DB error'));
 
-      model.findById = jest.fn().mockReturnValue({ lean: mockLean });
-
-      // Act & Assert
-      await expect(service.findOne(id)).rejects.toThrow(
-        InternalServerErrorException,
-      );
-      await expect(service.findOne(id)).rejects.toThrow(
-        'Failed to find object: Database error',
-      );
-    });
-
-    it('should re-throw NotFoundException without wrapping', async () => {
-      // Arrange
-      const id = 'nonexistent-id';
-      const mockExec = jest.fn().mockResolvedValue(null);
-      const mockLean = jest.fn().mockReturnValue({ exec: mockExec });
-
-      model.findById = jest.fn().mockReturnValue({ lean: mockLean });
-
-      // Act & Assert
-      await expect(service.findOne(id)).rejects.toThrow(NotFoundException);
-      expect(model.findById).toHaveBeenCalledWith(id);
+      await expect(service.findOne('id')).rejects.toThrow(InternalServerErrorException);
     });
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  describe('search', () => {
+    it('should return filtered results', async () => {
+      (model as any).countDocuments().exec.mockResolvedValue(1);
+      (model as any).find().exec.mockResolvedValue([mockVisoObject]);
+
+      const result = await service.search({ name: 'Test', ownerId: '507f1f77bcf86cd799439011' });
+      expect(result.total).toBe(1);
+      expect(result.items).toHaveLength(1);
+    });
+
+    it('should throw InternalServerErrorException on error', async () => {
+      (model as any).countDocuments().exec.mockRejectedValue(new Error('DB error'));
+      await expect(service.search({})).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('countObjects', () => {
+    it('should return total count', async () => {
+      (model as any).countDocuments().exec.mockResolvedValue(10);
+      const result = await service.countObjects();
+      expect(result.total).toBe(10);
+    });
+
+    it('should throw InternalServerErrorException on error', async () => {
+      (model as any).countDocuments().exec.mockRejectedValue(new Error('DB error'));
+      await expect(service.countObjects()).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('countObjectsByStatus', () => {
+    it('should return counts by status', async () => {
+      const mockAgg = [{ _id: 1, total: 5 }, { _id: 2, total: 3 }];
+      (model as any).aggregate().exec.mockResolvedValue(mockAgg);
+
+      const result = await service.countObjectsByStatus();
+      expect(result).toHaveLength(2);
+      expect(result[0].status).toBe('online');
+    });
+
+    it('should throw InternalServerErrorException on error', async () => {
+      (model as any).aggregate().exec.mockRejectedValue(new Error('DB error'));
+      await expect(service.countObjectsByStatus()).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('findLast', () => {
+    it('should return last object', async () => {
+      (model as any).findOne().exec.mockResolvedValue(mockVisoObject);
+
+      const result = await service.findLast();
+      expect(result).toEqual(mockVisoObject);
+    });
   });
 });

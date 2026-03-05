@@ -284,4 +284,89 @@ describe('PagerankFriendshipService', () => {
       expect(result.length).toBe(0);
     });
   });
+
+  describe('countFriendships', () => {
+    it('should return total count of edges', async () => {
+      const mockAgg = [{ total: 15 }];
+      (mockPagerankFriendshipModel as any).aggregate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockAgg),
+      });
+      const result = await service.countFriendships();
+      expect(result.total).toBe(15);
+    });
+
+    it('should return 0 if aggregation is empty', async () => {
+      (mockPagerankFriendshipModel as any).aggregate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([]),
+      });
+      const result = await service.countFriendships();
+      expect(result.total).toBe(0);
+    });
+
+    it('should throw error when aggregation fails', async () => {
+      (mockPagerankFriendshipModel as any).aggregate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockRejectedValue(new Error('error')),
+      });
+      await expect(service.countFriendships()).rejects.toThrow('Failed to count friendships: error');
+    });
+  });
+
+  describe('findLast', () => {
+    it('should return last friendship', async () => {
+      (mockPagerankFriendshipModel as any).findOne = jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(mockPageRankFriendship),
+      });
+      const result = await service.findLast();
+      expect(result).toEqual(mockPageRankFriendship);
+    });
+  });
+
+  describe('search', () => {
+    it('should return search results', async () => {
+      (mockVisoObjectModel as any).find = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([{ _id: '507f1f77bcf86cd799439011' }]),
+      });
+
+      (mockPagerankFriendshipModel as any).countDocuments = jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(1) });
+      (mockPagerankFriendshipModel as any).find = jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([mockPageRankFriendship]),
+      });
+
+      const result = await service.search({ name: 'test' });
+      expect(result.total).toBe(1);
+      expect(result.items).toHaveLength(1);
+    });
+
+    it('should throw error when search fails', async () => {
+      (mockVisoObjectModel as any).find = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockRejectedValue(new Error('error')),
+      });
+
+      await expect(service.search({ name: 'test' })).rejects.toThrow('Failed to search pagerankFriendship: error');
+    });
+  });
+
+  describe('findAll with relevance sort', () => {
+     it('should return friendships sorted by relevance', async () => {
+       (mockPagerankFriendshipModel as any).countDocuments = jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(1) });
+       (mockPagerankFriendshipModel as any).aggregate = jest.fn().mockReturnValue({
+         exec: jest.fn().mockResolvedValue([mockPageRankFriendship]),
+       });
+       (mockVisoObjectModel as any).find = jest.fn().mockReturnValue({
+         lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+       });
+ 
+       const result = await service.findAll(1, 10, 'relevance');
+       expect(result.items).toHaveLength(1);
+     });
+   });
 });
