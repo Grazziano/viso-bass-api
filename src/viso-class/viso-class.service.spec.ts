@@ -35,6 +35,9 @@ describe('VisoClassService', () => {
     }));
     mockVisoClassModel.find = jest.fn();
     mockVisoClassModel.findById = jest.fn();
+    mockVisoClassModel.countDocuments = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue(0),
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

@@ -52,7 +52,7 @@ describe('OwnersService', () => {
       await expect(
         service.create({
           email: 'gandalf.o.cinzento@example.com',
-          password: 'pass',
+          password: 'StrongP@ss123!',
         } as any),
       ).rejects.toBeInstanceOf(ConflictException);
     });
@@ -83,12 +83,12 @@ describe('OwnersService', () => {
 
       const result = await service.create({
         email: 'portador.do.anel@condado.com',
-        password: 'pass',
+        password: 'StrongP@ss123!',
       } as any);
 
       expect(saveMock).toHaveBeenCalled();
       expect(result).toBe(savedUser);
-      expect(bcrypt.hash).toHaveBeenCalledWith('pass', 10);
+      expect(bcrypt.hash).toHaveBeenCalledWith('StrongP@ss123!', 10);
     });
 
     it('should throw InternalServerErrorException when save fails', async () => {
@@ -110,7 +110,7 @@ describe('OwnersService', () => {
       await expect(
         service.create({
           email: 'boromir.caiu@gondor.com',
-          password: 'pass',
+          password: 'StrongP@ss123!',
         } as any),
       ).rejects.toBeInstanceOf(InternalServerErrorException);
     });

@@ -46,7 +46,7 @@ describe('Auth Roles (e2e)', () => {
 
   it('should forbid user role to create object', async () => {
     const email = `user.${Date.now()}@example.com`;
-    const password = 'pass123';
+    const password = 'StrongP@ss123!';
     await register(email, password, 'user');
     const token = await login(email, password);
     await request(app.getHttpServer() as unknown as App)
@@ -70,7 +70,7 @@ describe('Auth Roles (e2e)', () => {
 
   it('should allow admin role to create object', async () => {
     const email = `admin.${Date.now()}@example.com`;
-    const password = 'pass123';
+    const password = 'StrongP@ss123!';
     await register(email, password, 'admin');
     const token = await login(email, password);
     const res = await request(app.getHttpServer() as unknown as App)

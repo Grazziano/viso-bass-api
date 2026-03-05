@@ -37,6 +37,9 @@ describe('OnaEnvironmentService', () => {
     }));
     (mockOnaEnvironmentModel as any).find = jest.fn();
     (mockOnaEnvironmentModel as any).findById = jest.fn();
+    (mockOnaEnvironmentModel as any).countDocuments = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue(0),
+    });
 
     mockVisoObjectModel = jest.fn();
     (mockVisoObjectModel as any).find = jest.fn();

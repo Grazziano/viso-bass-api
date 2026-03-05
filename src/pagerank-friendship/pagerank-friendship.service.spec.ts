@@ -30,7 +30,9 @@ describe('PagerankFriendshipService', () => {
     // Add static methods to the mock constructor
     (mockPagerankFriendshipModel as any).find = jest.fn();
     (mockPagerankFriendshipModel as any).findById = jest.fn();
-    (mockPagerankFriendshipModel as any).countDocuments = jest.fn();
+    (mockPagerankFriendshipModel as any).countDocuments = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue(0),
+    });
 
     mockVisoObjectModel = jest.fn();
     (mockVisoObjectModel as any).find = jest.fn();

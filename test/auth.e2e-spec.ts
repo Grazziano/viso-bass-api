@@ -29,7 +29,7 @@ describe('Auth (e2e)', () => {
     const payload = {
       name: 'Gandalf The Grey',
       email: `gandalf.thegrey+${Date.now()}@istari.middleearth`,
-      password: 'gandalfstrongpass',
+      password: 'GandalfStrongP@ss123!',
     };
 
     const server = app.getHttpServer() as unknown as App;
@@ -46,7 +46,7 @@ describe('Auth (e2e)', () => {
   it('/auth/login (POST) 200', async () => {
     const credentials = {
       email: registeredEmail as string,
-      password: 'gandalfstrongpass',
+      password: 'GandalfStrongP@ss123!',
     };
 
     const server = app.getHttpServer() as unknown as App;
